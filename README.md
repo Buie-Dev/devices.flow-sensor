@@ -165,23 +165,15 @@ PUBLISH_INTERVAL_MS = 5000            # publish every 5 seconds
 
 ## Uploading the Script
 
-MicroPython runs `main.py` automatically on boot. Upload your configured script as `main.py`:
+From the project directory, run:
 
 ```bash
-mpremote connect /dev/cu.SLAB_USBtoUART cp flow_sensor_mqtt.py :main.py
+./upload.sh
 ```
 
-If the file is in your Downloads folder:
+This uploads `config.py` and `index.py` (as `main.py`) to the ESP32, verifies the files, and reboots the device automatically. It will print an error with troubleshooting steps if the port is not found.
 
-```bash
-mpremote connect /dev/cu.SLAB_USBtoUART cp ~/Downloads/flow_sensor_mqtt.py :main.py
-```
-
-Verify the upload:
-
-```bash
-mpremote connect /dev/cu.SLAB_USBtoUART ls
-```
+> **Port:** The script uses `/dev/cu.SLAB_USBtoUART`. If your board shows up on a different port, update the `PORT` variable at the top of `upload.sh`.
 
 ---
 
