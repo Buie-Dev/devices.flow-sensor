@@ -46,7 +46,7 @@ def pulse_isr(pin):
 def connect_wifi():
     wlan = network.WLAN(network.STA_IF)
     wlan.active(True)
-    if not wlan.isconnected():
+    while not wlan.isconnected():
         print(f"Connecting to WiFi: {WIFI_SSID}")
         wlan.connect(WIFI_SSID, WIFI_PASSWORD)
         timeout = 15
@@ -55,10 +55,10 @@ def connect_wifi():
             timeout -= 1
             print(".", end="")
         print()
-    if wlan.isconnected():
-        print(f"WiFi connected: {wlan.ifconfig()[0]}")
-    else:
-        raise RuntimeError("WiFi connection failed")
+        if not wlan.isconnected():
+            print("WiFi failed, retrying in 10s...")
+            time.sleep(10)
+    print(f"WiFi connected: {wlan.ifconfig()[0]}")
 
 
 # ─────────────────────────────────────────
@@ -132,7 +132,14 @@ def main():
     print(f"Flow sensor interrupt configured on GPIO {FLOW_PIN}")
 
     connect_wifi()
-    connect_mqtt()
+
+    while True:
+        try:
+            connect_mqtt()
+            break
+        except Exception as e:
+            print(f"MQTT connection failed: {e} — retrying in 10s...")
+            time.sleep(10)
 
     last_pub_time = time.ticks_ms()
 
