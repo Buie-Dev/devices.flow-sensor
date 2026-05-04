@@ -15,7 +15,7 @@ from machine import Pin
 from umqtt.simple import MQTTClient
 from config import WIFI_SSID, WIFI_PASSWORD, MQTT_BROKER, MQTT_PORT, MQTT_USER, MQTT_PASSWORD, SENSOR_NAME
 
-MQTT_CLIENT = "esp32_flow_sensor"
+MQTT_CLIENT = SENSOR_NAME
 FLOW_PIN = 14  # GPIO pin connected to sensor signal wire
 PUBLISH_INTERVAL_MS = 1000  # publish every 1 second
 
