@@ -153,7 +153,7 @@ top of the file:
 ```python
 WIFI_SSID         = "your_wifi_ssid"
 WIFI_PASSWORD     = "your_wifi_password"
-MQTT_BROKER       = "192.168.1.100"   # your broker IP
+MQTT_BROKER       = "192.168.x.x"   # your broker IP
 MQTT_PORT         = 1883
 MQTT_USER         = ""                 # leave blank if no auth
 MQTT_PASSWORD     = ""
@@ -190,8 +190,8 @@ Press `Ctrl+]` (right square bracket) to exit.
 ### Expected output
 Flow sensor interrupt configured on GPIO 14
 Connecting to WiFi: YourNetworkName
-WiFi connected: 192.168.1.55
-MQTT connected to 192.168.1.100, subscribed to healthcheck/request
+WiFi connected: 192.168.x.x
+MQTT connected to 192.168.x.x, subscribed to healthcheck/request
 Running — publishing every 5 seconds
 Published: {"sensor": "irrigation/flowSensor", "pulse_count": 0, "flow_rate_lpm": 0.0 ...}
 
