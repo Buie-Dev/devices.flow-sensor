@@ -1,249 +1,124 @@
-# DIGITEN FL-608 Flow Sensor + ESP32 — MicroPython MQTT Setup Guide
+![CI](https://github.com/Buie-Dev/home-server.flow-sensor/actions/workflows/ci.yml/badge.svg?branch=dev)
 
-## Overview
+# home-server.flow-sensor
 
-This guide covers everything needed to wire a DIGITEN FL-608 hall effect flow sensor to an
-ESP32 NodeMCU and run a MicroPython script that publishes flow data over MQTT. The script
-publishes pulse counts and calculated flow rate to `irrigation/flow` every 5 seconds, and
-responds to health check pings on `healthcheck/request`.
+ESP32 MicroPython service that reads a flow sensor and publishes pulse data over MQTT.
 
----
+## Why I built it
 
-## Hardware Required
+The flow sensor sends second-by-second pulse data to the MQTT broker. The irrigation-controller subscribes to this data and uses it to track how much water flows through each zone over time. The mobile app and web app show the live flow readings while irrigation is running.
 
-- DIGITEN FL-608 G3/4" water flow sensor
-- ESP32 NodeMCU development board
-- USB cable (Micro-USB or USB-C depending on your board)
-- 10kΩ resistor (optional — for external pull-up on signal wire)
-- Jumper wires
+## How it fits
 
----
+This runs on a dedicated ESP32 wired to a flow sensor inline with the irrigation water supply. It publishes to the same Mosquitto MQTT broker that all other services use.
 
-## Wiring
+- [home-server.infra](https://github.com/Buie-Dev/home-server.infra) runs the Mosquitto MQTT broker this sensor publishes to
+- [irrigation-controller](https://github.com/Buie-Dev/irrigation-controller) subscribes to `irrigation/flow` and converts pulses to litres
+- [home-server.api](https://github.com/Buie-Dev/home-server.api) is the Flask REST API
+- [home-server.web](https://github.com/Buie-Dev/home-server.web) and [home-server.mobile](https://github.com/Buie-Dev/home-server.mobile) display live flow data
 
-The sensor has three wires. Connect them to the ESP32 as follows:
+## Stack
 
-| Wire colour | Wire label | ESP32 pin             | Notes                      | Pull-up               |
-|-------------|------------|-----------------------|----------------------------|-----------------------|
-| Red         | VCC        | 3.3V or VIN           | 5V preferred (VIN = USB 5V)| —                     |
-| Black       | GND        | GND                   | Common ground              | —                     |
-| Yellow      | Signal     | GPIO 14               | Hall effect pulse output   | 10kΩ to 3.3V optional |
+- MicroPython on ESP32 NodeMCU
+- DIGITEN FL-608 G3/4" hall-effect flow sensor
+- MQTT via umqtt.simple
+- Bash scripts for flashing and uploading
 
-> **Pull-up note:** The pull-up resistor is optional. The code enables the ESP32 internal
-> pull-up automatically. Only add a physical 10kΩ resistor if you get erratic pulse counts.
+## Running it locally
 
----
+### Prerequisites
 
-## MQTT Topics
-
-| Action    | Topic                  | Description                                      |
-|-----------|------------------------|--------------------------------------------------|
-| Publish   | `irrigation/flow`      | Pulse count, flow rate, volume — every 5 seconds |
-| Subscribe | `healthcheck/request`  | Listens for any health check ping                |
-| Publish   | `healthcheck/response` | Responds with sensor name and status OK          |
-
-Example payload published to `irrigation/flow`:
-
-```json
-{
-  "sensor": "irrigation/flowSensor",
-  "pulse_count": 45,
-  "flow_rate_lpm": 0.818,
-  "volume_L": 0.00136,
-  "elapsed_s": 5.0
-}
-```
-
----
-
-## Computer Setup
-
-### Step 1 — Check your Python version
-
-```bash
-python3 --version
-```
-
-You need Python 3.10 or higher for the latest esptool. If you are on 3.9 (common with
-Anaconda), use `python3 -m esptool` throughout this guide instead of the `esptool` command
-directly — it works regardless of version.
-
-### Step 2 — Install esptool and mpremote
+- Python 3.10+ with `esptool` and `mpremote` installed
+- ESP32 NodeMCU connected via USB
+- CP210x USB driver (Mac only, from Silicon Labs)
 
 ```bash
 pip3 install esptool mpremote
 ```
 
-If you get an "externally managed environment" error:
+### First time setup
+
+1. Clone the repo
 
 ```bash
-pip3 install esptool mpremote --break-system-packages
+git clone https://github.com/Buie-Dev/home-server.flow-sensor.git
+cd home-server.flow-sensor
 ```
 
-> **Note:** If the `esptool` command is not found after installing, use `python3 -m esptool`
-> instead. This bypasses PATH issues common with Anaconda.
-
-### Step 3 — Install the CP210x USB driver (Mac only)
-
-Most ESP32 NodeMCU boards use a CP2102 USB chip. If your board does not appear as a serial
-port after plugging in, download and install the CP210x driver from Silicon Labs:
-
-**silabs.com → Products → Interface → USB Bridges → CP210x USB to UART Bridge**
-
-Unplug and reconnect the ESP32 after installing.
-
----
-
-## Finding Your Serial Port
-
-Run this without the ESP32 plugged in, then plug it in and run it again:
+2. Flash MicroPython firmware onto the ESP32
 
 ```bash
-ls /dev/cu.*
+./flash.sh
 ```
 
-The new entry that appears is your port. Common names:
-
-- `/dev/cu.SLAB_USBtoUART` — most common with NodeMCU + CP2102 chip
-- `/dev/cu.usbserial-0001`
-- `/dev/cu.usbmodem*`
-
-On **Windows**, open Device Manager → Ports (COM & LPT).  
-On **Linux**, run `ls /dev/ttyUSB*`.
-
----
-
-## Flashing MicroPython Firmware
-
-### Step 1 — Download the firmware
-
-Go to [micropython.org/download/ESP32_GENERIC](https://micropython.org/download/ESP32_GENERIC)
-and download the latest stable `.bin` file from the **Firmware** section at the top. Do not
-use the SPIRAM, Unicore, or OTA variants — the standard build is correct for the ESP32-D0WD.
-
-### Step 2 — Erase existing flash
-
-Replace `/dev/cu.SLAB_USBtoUART` with your actual port:
+3. Create `.env` from the example and fill in your WiFi and MQTT credentials
 
 ```bash
-python3 -m esptool -p /dev/cu.SLAB_USBtoUART erase_flash
+cp .env.example .env
 ```
 
-> **If it hangs at `Connecting......`:** Hold the **BOOT** button on the ESP32, tap **EN**
-> (reset) once, release BOOT, then run the command again immediately.
-
-### Step 3 — Flash MicroPython
-
-Replace the filename with the exact `.bin` you downloaded:
-
-```bash
-python3 -m esptool --chip esp32 -p /dev/cu.SLAB_USBtoUART --baud 460800 \
-  write_flash -z 0x1000 ~/Downloads/ESP32_GENERIC-20260406-v1.28.0.bin
-```
-
-A progress bar will appear. The process takes about 30 seconds.
-
----
-
-## Configuring the Script
-
-Before uploading, open `flow_sensor_mqtt.py` in a text editor and set these values at the
-top of the file:
-
-```python
-WIFI_SSID         = "your_wifi_ssid"
-WIFI_PASSWORD     = "your_wifi_password"
-MQTT_BROKER       = "192.168.x.x"   # your broker IP
-MQTT_PORT         = 1883
-MQTT_USER         = ""                 # leave blank if no auth
-MQTT_PASSWORD     = ""
-FLOW_PIN          = 14                 # GPIO pin for signal wire
-PUBLISH_INTERVAL_MS = 5000            # publish every 5 seconds
-```
-
----
-
-## Uploading the Script
-
-From the project directory, run:
+4. Upload the sensor code to the ESP32
 
 ```bash
 ./upload.sh
 ```
 
-This uploads `config.py` and `index.py` (as `main.py`) to the ESP32, verifies the files, and reboots the device automatically. It will print an error with troubleshooting steps if the port is not found.
+This generates `config.py` from `.env`, uploads it along with `index.py` (as `main.py`), and the ESP32 starts publishing on reboot.
 
-> **Port:** The script uses `/dev/cu.SLAB_USBtoUART`. If your board shows up on a different port, update the `PORT` variable at the top of `upload.sh`.
+## Configuration
 
----
+| Variable | Purpose |
+|---|---|
+| `WIFI_SSID` | WiFi network name |
+| `WIFI_PASSWORD` | WiFi password |
+| `MQTT_BROKER` | MQTT broker IP address |
+| `MQTT_PORT` | MQTT broker port (1883) |
+| `MQTT_USER` | MQTT username (blank if no auth) |
+| `MQTT_PASSWORD` | MQTT password (blank if no auth) |
+| `SENSOR_NAME` | Device name used as MQTT client ID and in health check responses |
 
-## Testing
+## Tests
 
-Open the serial monitor to watch boot output in real time:
+There are no automated tests. This is a hardware project that runs on bare-metal MicroPython. CI runs ShellCheck on the bash scripts.
+
+To monitor the sensor output, connect to the serial console:
 
 ```bash
 mpremote connect /dev/cu.SLAB_USBtoUART repl
 ```
 
-Press `Ctrl+]` (right square bracket) to exit.
+## Wiring
 
-### Expected output
-Flow sensor interrupt configured on GPIO 14
-Connecting to WiFi: YourNetworkName
-WiFi connected: 192.168.x.x
-MQTT connected to 192.168.x.x, subscribed to healthcheck/request
-Running — publishing every 5 seconds
-Published: {"sensor": "irrigation/flowSensor", "pulse_count": 0, "flow_rate_lpm": 0.0 ...}
+| Wire | ESP32 Pin | Notes |
+|---|---|---|
+| Red (VCC) | VIN (5V) | 5V preferred |
+| Black (GND) | GND | Common ground |
+| Yellow (Signal) | GPIO 14 | Hall-effect pulse output, internal pull-up enabled |
 
-### Testing the health check
+An external 10k ohm pull-up resistor between signal and 3.3V is optional. Only add one if you get erratic pulse counts.
 
-Publish any message to `healthcheck/request` from your MQTT client. The ESP32 will
-immediately respond on `healthcheck/response`:
+## MQTT topics
 
-```json
-{"sensor": "irrigation/flowSensor", "status": "ok"}
-```
+| Direction | Topic | Payload |
+|---|---|---|
+| Publish | `irrigation/flow` | `{ sensor, pulse_count, elapsed_s }` every 1 second |
+| Subscribe | `healthcheck/request` | Any message triggers a health response |
+| Publish | `healthcheck/response` | `{ device: "<sensor_name>" }` |
 
----
+## Calibration
 
-## Flow Rate Calibration
-
-The default calibration is `330` pulses per litre, derived from the FL-608 spec formula
-`F = 5.5 × Q` (Q in L/min). To verify this against your actual sensor, flow exactly 1 litre
-through the sensor into a measuring jug and check the reported pulse count. Update
-`PULSES_PER_LITRE` in the script to match.
-
----
+The FL-608 outputs roughly 330 pulses per litre (from the spec formula `F = 5.5 x Q` where Q is litres per minute). The irrigation-controller handles the conversion from pulses to litres. To verify the calibration, flow exactly 1 litre through the sensor and check the total pulse count.
 
 ## Troubleshooting
 
-### Board not detected / Connecting hangs
+**Board not detected** — Hold BOOT, tap EN, release BOOT, then run the command. Try a different USB cable since many are charge-only. Install the CP210x driver if the port never appears.
 
-- Hold BOOT, tap EN, release BOOT, then run the esptool command immediately
-- Add `--baud 115200` to slow the connection speed
-- Try a different USB cable — many are charge-only with no data lines
-- Install the CP210x driver if the port never appears after plugging in
+**WiFi not connecting** — SSID and password are case-sensitive. The ESP32 only supports 2.4 GHz networks.
 
-### WiFi not connecting
+**MQTT not connecting** — Confirm the broker IP and that port 1883 is reachable. Set MQTT_USER and MQTT_PASSWORD if the broker requires auth.
 
-- SSID and password are case sensitive
-- ESP32 only supports 2.4GHz — it will not connect to 5GHz networks
-- Move closer to the router if signal is weak
+**Zero pulse count** — Confirm the yellow wire is on GPIO 14 and VCC is connected. The sensor clicks faintly when water flows if powered.
 
-### MQTT not connecting
+## How I work on it
 
-- Confirm the broker IP is correct and the broker is running
-- Check port 1883 is not blocked by a firewall
-- Set `MQTT_USER` and `MQTT_PASSWORD` if your broker requires authentication
-
-### Zero pulse count when water is flowing
-
-- Confirm the yellow wire is on GPIO 14
-- Check VCC is connected — the sensor makes a faint click when water flows if powered
-- Add a physical 10kΩ pull-up resistor between signal and 3.3V
-- Confirm GPIO 14 is not in use by another peripheral
-
-### Ctrl+] not exiting the REPL
-
-Press `Ctrl+C` first to stop the running script, then `Ctrl+]` to exit. Make sure you are
-pressing the right square bracket `]` and not the letter J.
+Changes start as specs in `docs/specs/`. Claude Code implements them on a branch and I review and merge every pull request.
