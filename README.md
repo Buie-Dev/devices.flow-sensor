@@ -1,6 +1,6 @@
-![CI](https://github.com/Buie-Dev/home-server.flow-sensor/actions/workflows/ci.yml/badge.svg?branch=dev)
+![CI](https://github.com/Buie-Dev/devices.flow-sensor/actions/workflows/ci.yml/badge.svg?branch=dev)
 
-# home-server.flow-sensor
+# devices.flow-sensor
 
 ESP32 MicroPython service that reads a flow sensor and publishes pulse data over MQTT.
 
@@ -41,8 +41,8 @@ pip3 install esptool mpremote
 1. Clone the repo
 
 ```bash
-git clone https://github.com/Buie-Dev/home-server.flow-sensor.git
-cd home-server.flow-sensor
+git clone https://github.com/Buie-Dev/devices.flow-sensor.git
+cd devices.flow-sensor
 ```
 
 2. Flash MicroPython firmware onto the ESP32
