@@ -43,6 +43,11 @@ MQTT_PASSWORD = "$MQTT_PASSWORD"
 SENSOR_NAME = "$SENSOR_NAME"
 EOF
 
+# ─── Soft reset so main.py isn't running during upload ────────
+echo "Resetting device..."
+mpremote connect "$PORT" reset 2>/dev/null || true
+sleep 2
+
 # ─── Upload files ─────────────────────────────────────────────
 echo "Uploading config.py..."
 mpremote connect "$PORT" cp "$SCRIPT_DIR/config.py" :config.py
@@ -64,10 +69,6 @@ echo "Verifying files on device:"
 mpremote connect "$PORT" ls
 
 echo ""
-echo "Rebooting device..."
-mpremote connect "$PORT" reset
-
-echo ""
-echo "=== Upload complete ==="
+echo "=== Upload complete — press EN/RST on the ESP32 to reboot ==="
 echo "Run this to watch boot output (Ctrl+] to exit):"
 echo "  mpremote connect $PORT repl"

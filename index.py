@@ -13,7 +13,15 @@ import time
 import json
 from machine import Pin
 from umqtt.simple import MQTTClient
-from config import WIFI_SSID, WIFI_PASSWORD, MQTT_BROKER, MQTT_PORT, MQTT_USER, MQTT_PASSWORD, SENSOR_NAME
+from config import (
+    WIFI_SSID,
+    WIFI_PASSWORD,
+    MQTT_BROKER,
+    MQTT_PORT,
+    MQTT_USER,
+    MQTT_PASSWORD,
+    SENSOR_NAME,
+)
 
 MQTT_CLIENT = SENSOR_NAME
 FLOW_PIN = 14  # GPIO pin connected to sensor signal wire
@@ -29,7 +37,10 @@ TOPIC_HEALTH_PUBLISH = b"healthcheck/response"
 # ─────────────────────────────────────────
 pulse_count = 0
 last_pub_time = 0
+last_ping_time = 0
 client = None
+
+PING_INTERVAL_MS = 30000  # ping broker every 30s to maintain keepalive
 
 
 # ─────────────────────────────────────────
@@ -125,7 +136,8 @@ def publish_flow():
 # ─────────────────────────────────────────
 def main():
     global last_pub_time
-
+    time.sleep_ms(10000)
+    print("Waiting for 10 seconds...")
     # Setup flow sensor pin with internal pull-up, interrupt on falling edge
     flow_pin = Pin(FLOW_PIN, Pin.IN, Pin.PULL_UP)
     flow_pin.irq(trigger=Pin.IRQ_FALLING, handler=pulse_isr)
@@ -142,6 +154,7 @@ def main():
             time.sleep(10)
 
     last_pub_time = time.ticks_ms()
+    last_ping_time = time.ticks_ms()
 
     print("Running — publishing every", PUBLISH_INTERVAL_MS // 1000, "seconds")
 
@@ -150,17 +163,27 @@ def main():
             # Check for incoming MQTT messages (non-blocking)
             client.check_msg()
 
+            now = time.ticks_ms()
+
             # Publish on interval
-            if time.ticks_diff(time.ticks_ms(), last_pub_time) >= PUBLISH_INTERVAL_MS:
+            if time.ticks_diff(now, last_pub_time) >= PUBLISH_INTERVAL_MS:
                 publish_flow()
+
+            # Keepalive ping so the broker doesn't drop the connection
+            if time.ticks_diff(now, last_ping_time) >= PING_INTERVAL_MS:
+                client.ping()
+                last_ping_time = now
+                print("MQTT ping sent")
 
             time.sleep_ms(100)
 
         except OSError as e:
             print(f"MQTT error: {e} — reconnecting in 5s")
             time.sleep(5)
+            connect_wifi()  # Re-establish WiFi first if it dropped
             try:
                 connect_mqtt()
+                last_ping_time = time.ticks_ms()
             except Exception as e2:
                 print(f"Reconnect failed: {e2}")
 
